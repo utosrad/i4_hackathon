@@ -1,6 +1,6 @@
 """
 YYZ Flight Arrival Delay Prediction.
-Uses YYZ Flight Movements dataset; trains XGBoost and outputs delays.csv + feature_importance.png.
+Uses merged flight data (BTS + YYZ); trains XGBoost and outputs delays.csv + feature_importance.png.
 # pip install pandas numpy xgboost scikit-learn matplotlib
 """
 
@@ -12,8 +12,8 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
-# User updates this path to their CSV location
-FILE_PATH = "yyz_flights.csv"
+# User updates this path to their CSV location (run 0_merge_data.py first to create merged_flights.csv)
+FILE_PATH = "merged_flights.csv"
 
 REQUIRED_COLUMNS = [
     "aircraft.reg",
@@ -22,6 +22,7 @@ REQUIRED_COLUMNS = [
     "arrival.scheduledTime.utc",
     "arrival.revisedTime.utc",
     "departure.scheduledTime.utc",
+    "ARR_DELAY",
 ]
 
 UTC_COLUMNS = [
@@ -48,7 +49,7 @@ WIDEBODY_MODELS = ["777", "787", "747", "A330", "A340", "A350", "A380"]
 def main():
     # --- Step 1: Load & validate ---
     print("Loading data...")
-    df = pd.read_csv(FILE_PATH)
+    df = pd.read_csv(FILE_PATH, low_memory=False)
     print(df.columns.tolist())
     print(df.shape)
     print(f"Loaded {len(df)} rows, {len(df.columns)} columns")
@@ -58,18 +59,16 @@ def main():
         print("Missing required columns:", sorted(missing))
         sys.exit(1)
 
-    # Parse UTC datetime columns
+    # Parse UTC datetime columns (format='mixed' handles BTS vs YYZ datetime formats)
     for col in UTC_COLUMNS:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], utc=True)
+            df[col] = pd.to_datetime(df[col], format="mixed", utc=True, errors="coerce")
     if "departure.runwayTime.utc" in df.columns:
         df["departure.runwayTime.utc"] = pd.to_datetime(
-            df["departure.runwayTime.utc"], utc=True
+            df["departure.runwayTime.utc"], format="mixed", utc=True, errors="coerce"
         )
 
-    # Drops
-    df = df.dropna(subset=["arrival.scheduledTime.utc"])
-    df = df.dropna(subset=["aircraft.reg"])
+    # Drops (do not require aircraft.reg — BTS rows have no tail number)
     if "status" in df.columns:
         df = df[~df["status"].fillna("").str.lower().str.contains("cancel")]
     else:
@@ -78,15 +77,11 @@ def main():
     df = df.sort_values(["aircraft.reg", "departure.scheduledTime.utc"]).reset_index(
         drop=True
     )
-    print(f"Cleaning data... {len(df)} rows remaining after drops")
 
-    # --- Step 2: ARR_DELAY ---
-    print("Computing ARR_DELAY...")
-    df["ARR_DELAY"] = (
-        df["arrival.revisedTime.utc"] - df["arrival.scheduledTime.utc"]
-    ).dt.total_seconds() / 60.0
+    # --- Step 2: ARR_DELAY (use as-is from merged_flights.csv; no recomputation) ---
     df = df.dropna(subset=["ARR_DELAY"])
-    df["ARR_DELAY"] = df["ARR_DELAY"].clip(lower=0)
+    df = df[df["ARR_DELAY"] <= 600]
+    print(f"Cleaning data... {len(df)} rows remaining after drops")
     print("ARR_DELAY stats:", df["ARR_DELAY"].describe())
 
     # --- Step 3: Feature engineering ---
@@ -173,6 +168,7 @@ def main():
         "ARR_DELAY",
         "PRIOR_LEG_DELAY",
         "PREDICTED_DELAY",
+        "source",
     ]
     df_out = df.reindex(columns=out_cols)
     print("Saving delays.csv...")
