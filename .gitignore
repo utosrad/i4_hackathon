@@ -1,4 +1,44 @@
+########################
+# Data files and outputs
+########################
+
+# New structured data dirs
+data/raw/
+data/processed/
+data/figures/
+
+# Legacy root data files (kept for backward compatibility; now removed)
 merged_flights.csv
 flights_sample_3m.csv
 beta_scores.csv
 delays.csv
+
+########################
+# Env and secrets (never commit)
+########################
+.env
+.env.local
+.env.*.local
+
+########################
+# Python caches / venv
+########################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+########################
+# OS / Editor junk
+########################
+.DS_Store
+.idea/
+.vscode/
+
+########################
+# Streamlit
+########################
+.streamlit/

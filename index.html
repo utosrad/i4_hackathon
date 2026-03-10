@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YYZ Contagion Optimizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="data.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --accent: #00d4ff;
+      --danger: #ff4b4b;
+      --warning: #ffa500;
+      --safe: #00cc88;
+      --text: #e8e8ec;
+      --muted: #6b6b7a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 24px 24px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app { position: relative; z-index: 1; opacity: 0; animation: fadeIn 0.6s ease forwards; }
+    @keyframes fadeIn { to { opacity: 1; } }
+
+    /* Header */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      background: rgba(10, 10, 15, 0.92);
+      border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 100;
+    }
+    .header-left h1 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--accent); letter-spacing: 0.02em; }
+    .header-left .subtitle { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+    .header-stats { display: flex; gap: 12px; }
+    .stat-pill {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.2s ease;
+    }
+    .stat-pill:hover { background: rgba(255,255,255,0.1); border-color: rgba(0, 212, 255, 0.3); }
+    .stat-pill .value { color: var(--accent); }
+
+    /* Tabs */
+    .tabs-wrap { padding-top: 64px; }
+    .tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 24px;
+      background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .tab {
+      padding: 12px 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.2s ease;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab .live-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: var(--safe);
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+      animation: livePulse 1.5s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    /* Main content */
+    .main { display: flex; min-height: calc(100vh - 64px - 45px); }
+    .col-graph {
+      width: 60%;
+      min-height: 500px;
+      position: relative;
+      border-right: 1px solid rgba(255,255,255,0.08);
+    }
+    #network-container { width: 100%; height: 100%; min-height: 500px; }
+    #network-svg { display: block; }
+
+    .col-side {
+      width: 40%;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    /* Control panel */
+    .panel {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 18px;
+      transition: all 0.2s ease;
+    }
+    .panel-title { font-size: 0.75rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+    .control-row { margin-bottom: 14px; }
+    .control-row:last-child { margin-bottom: 0; }
+    .control-row label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    select:hover, select:focus { border-color: var(--accent); outline: none; }
+
+    /* Slider */
+    .slider-wrap { display: flex; align-items: center; gap: 12px; }
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+    .slider-value { font-size: 0.9rem; font-weight: 600; color: var(--accent); min-width: 52px; text-align: right; }
+
+    .btn-run {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-run:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn-run:active { transform: translateY(0); }
+
+    /* Results */
+    .results-summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .result-box {
+      flex: 1;
+      min-width: 100px;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .result-box .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+    .result-box .value { font-size: 1.1rem; font-weight: 700; }
+    .result-box.source .value { color: var(--danger); }
+    .result-box.infected .value { color: var(--warning); }
+    .result-box.ends .value { color: var(--safe); }
+
+    /* Bar chart */
+    .cascade-bars { margin-top: 8px; }
+    .cascade-bar-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+    .cascade-bar-row .label { font-size: 0.75rem; color: var(--text); min-width: 100px; }
+    .cascade-bar-row .bar-wrap { flex: 1; height: 20px; background: rgba(255,255,255,0.08); border-radius: 4px; position: relative; overflow: hidden; }
+    .cascade-bar-row .bar {
+      height: 100%;
+      border-radius: 4px;
+      width: 0;
+      transition: width 0.6s ease;
+    }
+    .cascade-bar-row .val { font-size: 0.75rem; font-weight: 600; min-width: 36px; text-align: right; }
+
+    .threshold-line {
+      stroke: var(--warning);
+      stroke-dasharray: 4 4;
+      stroke-width: 1;
+    }
+
+    /* Gate table */
+    .gate-badges { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .badge { padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; }
+    .badge.before { background: rgba(255, 75, 75, 0.2); color: var(--danger); }
+    .badge.after { background: rgba(0, 204, 136, 0.2); color: var(--safe); }
+    .badge.reduction { color: var(--accent); font-size: 0.9rem; }
+
+    .gate-table-wrap { overflow-x: auto; }
+    table.gate-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .gate-table th, .gate-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .gate-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .gate-table tr { transition: background 0.2s ease; }
+    .gate-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+    .gate-table tr.border-red { border-left: 3px solid var(--danger); }
+    .gate-table tr.border-orange { border-left: 3px solid var(--warning); }
+    .gate-table tr.border-green { border-left: 3px solid var(--safe); }
+
+    /* Tooltip */
+    .tooltip {
+      position: fixed;
+      padding: 10px 14px;
+      background: rgba(10, 10, 15, 0.95);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 8px;
+      font-size: 0.8rem;
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      max-width: 260px;
+    }
+    .tooltip.visible { opacity: 1; }
+    .tooltip .row { margin: 2px 0; }
+
+    /* Node pulse for red */
+    .node-red-pulse { animation: nodePulse 1.5s ease-in-out infinite; }
+    @keyframes nodePulse {
+      0%, 100% { filter: drop-shadow(0 0 4px var(--danger)); }
+      50% { filter: drop-shadow(0 0 12px var(--danger)); }
+    }
+
+    /* Error card */
+    .error-card {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(20, 20, 28, 0.98);
+      border: 1px solid var(--danger);
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 420px;
+      text-align: center;
+      z-index: 2000;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .error-card .icon { font-size: 2rem; margin-bottom: 12px; }
+    .error-card h3 { margin: 0 0 12px; color: var(--danger); font-size: 1.1rem; }
+    .error-card p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+    .error-card.hidden { display: none; }
+
+    .view { display: none; padding: 20px; }
+    .view.active { display: block; }
+    #view-gates .view-content { max-width: 100%; }
+
+    .results-panel.hidden { display: none; }
+
+    /* Live flights */
+    .live-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .live-updated { font-size: 0.8rem; color: var(--muted); }
+    .live-window-note { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+    .live-fallback { background: rgba(255, 165, 0, 0.15); border: 1px solid rgba(255, 165, 0, 0.4); border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 0.85rem; color: var(--warning); }
+    .btn-refresh { padding: 8px 16px; background: rgba(0, 212, 255, 0.2); border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; font-family: inherit; font-size: 0.85rem; cursor: pointer; transition: all 0.2s ease; }
+    .btn-refresh:hover { background: rgba(0, 212, 255, 0.3); }
+    .risk-tag { font-size: 0.7rem; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+    .risk-tag.high { background: rgba(255, 75, 75, 0.25); color: var(--danger); }
+    .risk-tag.medium { background: rgba(255, 165, 0, 0.25); color: var(--warning); }
+    .risk-tag.low { background: rgba(0, 204, 136, 0.25); color: var(--safe); }
+    .risk-tag.new { background: rgba(255,255,255,0.15); color: var(--muted); }
+    .btn-simulate { padding: 4px 10px; font-size: 0.75rem; background: var(--accent); color: var(--bg); border: none; border-radius: 6px; font-family: inherit; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+    .btn-simulate:hover { filter: brightness(1.15); }
+    .btn-simulate:disabled { opacity: 0.5; cursor: not-allowed; }
+    table.live-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .live-table th, .live-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .live-table th { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .live-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+    /* Network legend */
+    .net-legend {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      z-index: 10;
+      background: rgba(10,10,15,0.82);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .net-legend-title { font-size: 0.65rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+    .net-legend-items { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+    .net-legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--text); }
+    .net-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .net-legend-edge { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 7px; margin-top: 2px; }
+    .net-legend-line { width: 24px; height: 2px; background: rgba(255,255,255,0.3); border-radius: 2px; flex-shrink: 0; }
+
+    /* Network hover tooltip override */
+    .tooltip { max-width: 300px; min-width: 240px; line-height: 1.5; }
+    .tt-header { font-weight: 700; font-size: 0.9rem; margin-bottom: 6px; }
+    .tt-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-bottom: 10px; }
+    .tt-section { margin-bottom: 10px; }
+    .tt-section:last-child { margin-bottom: 0; }
+    .tt-label { font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+    .tt-row { font-size: 0.8rem; margin: 2px 0; }
+    .tt-row strong { color: var(--text); }
+    .tt-desc { font-size: 0.75rem; color: var(--muted); margin-top: 5px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.08); line-height: 1.45; }
+    .tt-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+    .tt-bar-bg { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+    .tt-bar-fill { height: 100%; border-radius: 3px; }
+
+    /* Explainer panel */
+    .explainer-card { background: rgba(0,212,255,0.05); border: 1px solid rgba(0,212,255,0.18); border-radius: 10px; padding: 14px 16px; font-size: 0.8rem; color: #c0c0cc; line-height: 1.55; }
+    .explainer-card strong { color: var(--text); }
+    .explainer-items { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .explainer-item { display: flex; align-items: flex-start; gap: 10px; font-size: 0.78rem; }
+    .explainer-icon { font-size: 0.9rem; flex-shrink: 0; margin-top: 1px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-left">
+        <h1>YYZ CONTAGION OPTIMIZER</h1>
+        <div class="subtitle">I4 Case Competition — Predictive Gate Optimization</div>
+      </div>
+      <div class="header-stats">
+        <div class="stat-pill">Total Flights: <span class="value" id="stat-flights">0</span></div>
+        <div class="stat-pill">Avg Delay: <span class="value" id="stat-avgdelay">0</span> min</div>
+        <div class="stat-pill">R₀ = <span class="value">0.50</span></div>
+      </div>
+    </header>
+
+    <div class="tabs-wrap">
+      <div class="tabs">
+        <div class="tab active" data-tab="contagion">CONTAGION NETWORK</div>
+        <div class="tab" data-tab="live"><span class="live-dot"></span>LIVE FLIGHTS</div>
+        <div class="tab" data-tab="gates">GATE ASSIGNMENTS</div>
+      </div>
+    </div>
+
+    <div id="view-contagion" class="view active">
+      <div class="main">
+        <div class="col-graph">
+          <div id="network-container">
+            <svg id="network-svg"></svg>
+          </div>
+          <div class="net-legend">
+            <div class="net-legend-title">Node = Flight · Size = Beta Score</div>
+            <div class="net-legend-items">
+              <div class="net-legend-item"><div class="net-legend-dot" style="background:#ff4b4b;box-shadow:0 0 6px #ff4b4b88"></div>Critical spreader (Beta &gt; 66)</div>
+              <div class="net-legend-item"><div class="net-legend-dot" style="background:#ffa500"></div>Moderate risk (Beta 33–66)</div>
+              <div class="net-legend-item"><div class="net-legend-dot" style="background:#00cc88"></div>Low risk (Beta &lt; 33)</div>
+            </div>
+            <div class="net-legend-edge"><div class="net-legend-line"></div>Same aircraft tail — delay propagation path</div>
+          </div>
+        </div>
+        <div class="col-side">
+          <div class="explainer-card">
+            <strong>How to read this network</strong>
+            <div class="explainer-items">
+              <div class="explainer-item"><span class="explainer-icon">⭕</span><span>Each <strong>circle</strong> is a YYZ flight. Bigger = higher systemic risk (Beta Score).</span></div>
+              <div class="explainer-item"><span class="explainer-icon">〰️</span><span><strong>Lines</strong> link flights on the same aircraft tail. A delay on one node travels along these edges.</span></div>
+              <div class="explainer-item"><span class="explainer-icon">🖱️</span><span><strong>Hover</strong> any node to see exactly how it infects its neighbours.</span></div>
+              <div class="explainer-item"><span class="explainer-icon">▶️</span><span><strong>Simulate</strong> a delay below — watch the cascade ripple through the network in real time.</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">DELAY CASCADE SIMULATOR</div>
+            <div class="control-row">
+              <label>Flight</label>
+              <select id="flight-select">
+                <option value="">Select a flight…</option>
+              </select>
+            </div>
+            <div class="control-row">
+              <label>Injected delay (minutes)</label>
+              <div class="slider-wrap">
+                <input type="range" id="delay-slider" min="0" max="180" step="5" value="45" />
+                <span class="slider-value" id="delay-value">45 min</span>
+              </div>
+            </div>
+            <button class="btn-run" id="btn-run">▶ RUN SIMULATION</button>
+          </div>
+          <div class="panel results-panel hidden" id="results-panel">
+            <div class="panel-title">Cascade results</div>
+            <div class="results-summary">
+              <div class="result-box source"><div class="label">Source delay</div><div class="value" id="res-source">—</div></div>
+              <div class="result-box infected"><div class="label">Flights infected</div><div class="value" id="res-infected">—</div></div>
+              <div class="result-box ends"><div class="label">Cascade ends at</div><div class="value" id="res-ends">—</div></div>
+            </div>
+            <div class="cascade-bars" id="cascade-bars"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-live" class="view">
+      <div class="view-content">
+        <div class="live-toolbar">
+          <div>
+            <span class="live-updated" id="live-updated">Last updated: —</span>
+            <div class="live-window-note">Current aircraft in YYZ area (OpenSky live).</div>
+          </div>
+          <button type="button" class="btn-refresh" id="live-refresh">🔄 Refresh</button>
+        </div>
+        <div class="live-fallback hidden" id="live-fallback">OpenSky API unavailable — showing last known YYZ flight data</div>
+        <div class="panel">
+          <table class="live-table" id="live-table">
+            <thead>
+              <tr>
+                <th>Callsign</th>
+                <th>Origin</th>
+                <th>Est. Arrival</th>
+                <th>Beta Score</th>
+                <th>Risk Level</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="live-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-gates" class="view">
+      <div class="view-content">
+        <div class="gate-table-wrap">
+          <table class="gate-table" id="gate-table">
+            <thead>
+              <tr>
+                <th>Flight</th>
+                <th>Airline</th>
+                <th>Pred. Delay</th>
+                <th>Beta Score</th>
+                <th>Original Gate</th>
+                <th>Optimized Gate</th>
+              </tr>
+            </thead>
+            <tbody id="gate-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+  <div class="error-card hidden" id="error-card">
+    <div class="icon">⚠️</div>
+    <h3>Data files not found</h3>
+    <p>Ensure data.js exists (run: python3 embed_data.py)</p>
+  </div>
+
+  <script>
+    (function() {
+      const ACCENT = '#00d4ff';
+      const DANGER = '#ff4b4b';
+      const WARNING = '#ffa500';
+      const SAFE = '#00cc88';
+      const DECAY = 0.7;
+      const THRESHOLD = 15;
+
+      let betaRows = [];
+      let gateRows = [];
+      let yyzTop40 = [];
+      let nodeById = new Map();
+      let simulation = null;
+      let zoom = null;
+      let cascadeChain = [];
+
+      const tooltip = document.getElementById('tooltip');
+      const errorCard = document.getElementById('error-card');
+
+      function showError() {
+        errorCard.classList.remove('hidden');
+      }
+      function hideError() {
+        errorCard.classList.add('hidden');
+      }
+
+      function nodeColor(betaNorm) {
+        const b = parseFloat(betaNorm);
+        if (b > 66) return DANGER;
+        if (b > 33) return WARNING;
+        return SAFE;
+      }
+
+      function loadData() {
+        if (typeof BETA_DATA === 'undefined' || typeof GATE_DATA === 'undefined') {
+          showError();
+          return;
+        }
+        betaRows = BETA_DATA;
+        gateRows = GATE_DATA;
+        hideError();
+        init();
+      }
+
+      function init() {
+        const yyz = (betaRows || []);
+        yyzTop40 = yyz
+          .map(r => ({ ...r, _betaNorm: parseFloat(r.DELAY_BETA_NORM) || 0 }))
+          .sort((a, b) => b._betaNorm - a._betaNorm)
+          .slice(0, 40);
+
+        if (yyzTop40.length === 0) return;
+
+        // Stats
+        const totalFlights = yyz.length;
+        const avgDelay = totalFlights
+          ? (yyz.reduce((s, r) => s + (parseFloat(r.PREDICTED_DELAY) || 0), 0) / totalFlights).toFixed(1)
+          : 0;
+        countUp('stat-flights', totalFlights, 800);
+        countUp('stat-avgdelay', avgDelay, 800);
+
+        // Flight dropdown
+        const sel = document.getElementById('flight-select');
+        sel.innerHTML = '<option value="">Select a flight…</option>';
+        yyzTop40.forEach((r, i) => {
+          const callSign = (r.callSign || '').trim() || '—';
+          const airline = (r['airline.iata'] || '').trim() || '—';
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = `${callSign} ${airline}`;
+          sel.appendChild(opt);
+        });
+
+        // Slider
+        const slider = document.getElementById('delay-slider');
+        const delayValue = document.getElementById('delay-value');
+        slider.addEventListener('input', () => { delayValue.textContent = slider.value + ' min'; });
+
+        buildNetwork();
+        renderGateTable();
+        setupTabs();
+        document.getElementById('btn-run').addEventListener('click', runSimulation);
+        fetchLiveFlights();
+        document.getElementById('live-refresh').addEventListener('click', fetchLiveFlights);
+      }
+
+      function formatLiveTime(unixSec) {
+        if (unixSec == null) return '—';
+        const d = new Date(unixSec * 1000);
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+
+      function getRiskTag(betaNorm) {
+        const b = parseFloat(betaNorm);
+        if (b > 66) return { label: 'HIGH RISK', cls: 'high' };
+        if (b > 33) return { label: 'MEDIUM', cls: 'medium' };
+        return { label: 'LOW', cls: 'low' };
+      }
+
+      function normalizeCallsign(s) {
+        return (s || '').trim().replace(/\s+/g, '');
+      }
+
+      function findYyzTop40Index(callsign, icao24) {
+        const cs = normalizeCallsign(callsign);
+        const reg = (icao24 || '').trim();
+        if (!cs) return -1;
+        let i = yyzTop40.findIndex(r => (r['aircraft.reg'] || '').trim() === reg && normalizeCallsign(r.callSign) === cs);
+        if (i >= 0) return i;
+        return yyzTop40.findIndex(r => normalizeCallsign(r.callSign) === cs);
+      }
+
+      function renderLiveFlights(flights) {
+        const tbody = document.getElementById('live-tbody');
+        const fallbackEl = document.getElementById('live-fallback');
+        tbody.innerHTML = '';
+        fallbackEl.classList.add('hidden');
+
+        const rows = Array.isArray(flights) && flights.length > 0 ? flights : null;
+        const useFallback = !rows;
+
+        if (useFallback) {
+          fallbackEl.classList.remove('hidden');
+          const fallbackRows = (betaRows || []).slice(0, 80).map((r, i) => ({
+            callsign: (r.callSign || '').trim() || '—',
+            origin: '—',
+            estArrival: null,
+            betaNorm: parseFloat(r.DELAY_BETA_NORM) || 0,
+            predDelay: parseFloat(r.PREDICTED_DELAY) || 0,
+            match: true,
+            icao24: (r['aircraft.reg'] || '').trim()
+          }));
+          fallbackRows.forEach(row => appendLiveRow(tbody, row));
+          return;
+        }
+
+        rows.forEach(flight => {
+          const callsign = (flight.callsign || '').trim() || '—';
+          const icao24 = (flight.icao24 || '').trim();
+          const csNorm = normalizeCallsign(callsign);
+          const betaMatch = (betaRows || []).find(r => normalizeCallsign(r.callSign) === csNorm && (r['aircraft.reg'] || '').trim() === icao24)
+            || (betaRows || []).find(r => normalizeCallsign(r.callSign) === csNorm);
+          const row = {
+            callsign,
+            origin: (flight.estDepartureAirport || '').trim() || '—',
+            estArrival: flight.lastSeen,
+            betaNorm: betaMatch ? (parseFloat(betaMatch.DELAY_BETA_NORM) || 0) : null,
+            predDelay: betaMatch ? (parseFloat(betaMatch.PREDICTED_DELAY) || 0) : null,
+            match: !!betaMatch,
+            icao24
+          };
+          appendLiveRow(tbody, row);
+        });
+      }
+
+      function appendLiveRow(tbody, row) {
+        const tr = document.createElement('tr');
+        const risk = row.match && row.betaNorm != null ? getRiskTag(row.betaNorm) : { label: 'NEW FLIGHT - No beta data', cls: 'new' };
+        const betaText = row.match && row.betaNorm != null ? row.betaNorm.toFixed(1) : '—';
+        const yyzIndex = findYyzTop40Index(row.callsign, row.icao24);
+        const canSimulate = yyzIndex >= 0;
+        const btn = canSimulate
+          ? `<button type="button" class="btn-simulate" data-yyz-index="${yyzIndex}">▶ Simulate</button>`
+          : `<button type="button" class="btn-simulate" disabled>▶ Simulate</button>`;
+        tr.innerHTML = `
+          <td>${row.callsign}</td>
+          <td>${row.origin}</td>
+          <td>${formatLiveTime(row.estArrival)}</td>
+          <td>${betaText}</td>
+          <td><span class="risk-tag ${risk.cls}">${risk.label}</span></td>
+          <td>${btn}</td>
+        `;
+        tbody.appendChild(tr);
+        if (canSimulate) {
+          tr.querySelector('.btn-simulate').addEventListener('click', () => runLiveSimulate(yyzIndex));
+        }
+      }
+
+      function runLiveSimulate(yyzIndex) {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+        document.querySelector('.tab[data-tab="contagion"]').classList.add('active');
+        document.getElementById('view-contagion').classList.add('active');
+        const sel = document.getElementById('flight-select');
+        sel.value = String(yyzIndex);
+        runSimulation();
+      }
+
+      function showLiveError() {
+        renderLiveFlights(null);
+      }
+
+      function statesToFlights(data) {
+        if (!data || !Array.isArray(data.states)) return [];
+        return data.states.map(state => ({
+          icao24: state[0] || '',
+          callsign: (state[1] || '').trim(),
+          estDepartureAirport: null,
+          lastSeen: null
+        })).filter(f => f.callsign);
+      }
+
+      function fetchLiveFlights() {
+        function setLiveUpdated() {
+          document.getElementById('live-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+        function fallbackToStatesAll() {
+          const url = 'https://opensky-network.org/api/states/all?lamin=43.5&lomin=-79.8&lamax=43.9&lomax=-79.4';
+          fetch(url)
+            .then(r => {
+              if (!r.ok) {
+                setLiveUpdated();
+                showLiveError();
+                return null;
+              }
+              return r.json();
+            })
+            .then(parsed => {
+              if (parsed === null) return;
+              setLiveUpdated();
+              const flights = statesToFlights(parsed);
+              if (flights.length > 0) {
+                const anyMatch = flights.some(f => {
+                  const csNorm = normalizeCallsign(f.callsign);
+                  return (betaRows || []).some(r => normalizeCallsign(r.callSign) === csNorm);
+                });
+                if (anyMatch) {
+                  renderLiveFlights(flights);
+                } else {
+                  showLiveError();
+                }
+              } else {
+                showLiveError();
+              }
+            })
+            .catch(() => {
+              setLiveUpdated();
+              showLiveError();
+            });
+        }
+        fetch('/api/live-flights')
+          .then(r => {
+            if (!r.ok) throw new Error('Backend unavailable');
+            return r.json();
+          })
+          .then(flights => {
+            setLiveUpdated();
+            if (Array.isArray(flights) && flights.length > 0) {
+              renderLiveFlights(flights);
+            } else {
+              fallbackToStatesAll();
+            }
+          })
+          .catch(() => fallbackToStatesAll());
+      }
+
+      function countUp(id, end, duration) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const isNum = typeof end === 'number' && Number.isInteger(end);
+        const start = 0;
+        const startTime = performance.now();
+        function tick(now) {
+          const t = Math.min((now - startTime) / duration, 1);
+          const eased = 1 - Math.pow(1 - t, 2);
+          const val = start + (end - start) * eased;
+          el.textContent = isNum ? Math.round(val) : (typeof end === 'number' ? val.toFixed(1) : end);
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      }
+
+      function buildNetwork() {
+        const container = document.getElementById('network-container');
+        const width = container.clientWidth || 800;
+        const height = Math.max(500, container.clientHeight || 500);
+
+        d3.select('#network-svg').selectAll('*').remove();
+        const svg = d3.select('#network-svg')
+          .attr('width', width)
+          .attr('height', height);
+
+        const g = svg.append('g');
+
+        const nodes = yyzTop40.map((r, i) => ({
+          id: i,
+          ...r,
+          radius: 8 + (parseFloat(r.DELAY_BETA_NORM) || 0) / 12,
+          color: nodeColor(r.DELAY_BETA_NORM)
+        }));
+
+        nodeById.clear();
+        nodes.forEach(n => nodeById.set(n.id, n));
+
+        const regToIds = new Map();
+        nodes.forEach(n => {
+          const reg = (n['aircraft.reg'] || '').trim();
+          if (!reg) return;
+          if (!regToIds.has(reg)) regToIds.set(reg, []);
+          regToIds.get(reg).push(n.id);
+        });
+
+        const links = [];
+        regToIds.forEach(ids => {
+          for (let i = 0; i < ids.length - 1; i++) {
+            links.push({ source: ids[i], target: ids[i + 1] });
+          }
+        });
+
+        // Glow filter for high-risk nodes
+        const defs = svg.append('defs');
+        const glow = defs.append('filter').attr('id', 'glow-red');
+        glow.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur');
+        const feMerge = glow.append('feMerge');
+        feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+        feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+        const link = g.append('g').attr('class', 'links').selectAll('line')
+          .data(links)
+          .join('line')
+          .attr('stroke', 'rgba(255,255,255,0.18)')
+          .attr('stroke-width', 1.5)
+          .attr('stroke-dasharray', '4 3');
+
+        const node = g.append('g').attr('class', 'nodes').selectAll('circle')
+          .data(nodes)
+          .join('circle')
+          .attr('r', d => d.radius)
+          .attr('fill', d => d.color)
+          .attr('opacity', 0)
+          .attr('data-id', d => d.id)
+          .attr('filter', d => parseFloat(d.DELAY_BETA_NORM) > 66 ? 'url(#glow-red)' : null)
+          .attr('stroke', d => parseFloat(d.DELAY_BETA_NORM) > 66 ? 'rgba(255,75,75,0.5)' : 'rgba(255,255,255,0.1)')
+          .attr('stroke-width', d => parseFloat(d.DELAY_BETA_NORM) > 66 ? 2 : 0.5)
+          .style('cursor', 'pointer')
+          .on('mouseover', (ev, d) => {
+            const betaNorm = parseFloat(d.DELAY_BETA_NORM) || 0;
+            const predDelay = parseFloat(d.PREDICTED_DELAY) || 0;
+            const downstream = parseInt(d.downstream_count) || 0;
+            const callSign = (d.callSign || '—').trim();
+            const airline = (d['airline.iata'] || '').trim();
+            const reg = (d['aircraft.reg'] || '—').trim();
+            const cascadeDelay = Math.round(predDelay * DECAY);
+            const hopsUntilSafe = predDelay > 0
+              ? Math.ceil(Math.log(THRESHOLD / predDelay) / Math.log(DECAY))
+              : 0;
+
+            let riskLabel, riskColor, riskBg, riskDesc;
+            if (betaNorm > 66) {
+              riskLabel = '🔴 CRITICAL SPREADER';
+              riskColor = DANGER;
+              riskBg = 'rgba(255,75,75,0.15)';
+              riskDesc = `This flight is a network super-spreader. A delay here will cascade to <strong>${downstream}</strong> downstream flight${downstream !== 1 ? 's' : ''} on tail <strong>${reg}</strong>, taking ~${hopsUntilSafe > 0 ? hopsUntilSafe : '1+'} hop${hopsUntilSafe !== 1 ? 's' : ''} to dampen below 15 min.`;
+            } else if (betaNorm > 33) {
+              riskLabel = '🟠 MODERATE RISK';
+              riskColor = WARNING;
+              riskBg = 'rgba(255,165,0,0.12)';
+              riskDesc = `Moderate amplifier. This flight passes a reduced delay (~${cascadeDelay} min) forward to <strong>${downstream}</strong> connected flight${downstream !== 1 ? 's' : ''}. Monitor during peak traffic.`;
+            } else {
+              riskLabel = '🟢 LOW RISK';
+              riskColor = SAFE;
+              riskBg = 'rgba(0,204,136,0.1)';
+              riskDesc = `Low systemic impact. Even if delayed, the cascade dies out quickly — downstream flights absorb less than 15 min each.`;
+            }
+
+            const barPct = Math.min(100, betaNorm).toFixed(1);
+            const delayBarPct = Math.min(100, (predDelay / 180) * 100).toFixed(1);
+
+            tooltip.innerHTML = `
+              <div class="tt-header" style="color:${riskColor}">✈ ${callSign}${airline ? ' · ' + airline : ''}</div>
+              <div class="tt-badge" style="background:${riskBg};color:${riskColor}">${riskLabel}</div>
+              <div class="tt-section">
+                <div class="tt-label">Systemic Risk Score</div>
+                <div class="tt-row">Beta: <strong style="color:${riskColor}">${betaNorm.toFixed(1)}</strong> / 100</div>
+                <div class="tt-bar-wrap">
+                  <div class="tt-bar-bg"><div class="tt-bar-fill" style="width:${barPct}%;background:${riskColor}"></div></div>
+                  <span style="font-size:0.7rem;color:${riskColor};min-width:34px">${barPct}%</span>
+                </div>
+              </div>
+              <div class="tt-section">
+                <div class="tt-label">Own Delay</div>
+                <div class="tt-row">Predicted: <strong>${predDelay.toFixed(0)} min</strong></div>
+                <div class="tt-bar-wrap">
+                  <div class="tt-bar-bg"><div class="tt-bar-fill" style="width:${delayBarPct}%;background:${riskColor}88"></div></div>
+                  <span style="font-size:0.7rem;color:var(--muted);min-width:34px">${predDelay.toFixed(0)} min</span>
+                </div>
+              </div>
+              <div class="tt-section">
+                <div class="tt-label">Network Cascade</div>
+                <div class="tt-row">Downstream flights on <strong>${reg}</strong>: <strong style="color:${riskColor}">${downstream}</strong></div>
+                <div class="tt-row">Inherited delay per hop: ~<strong>${cascadeDelay} min</strong> <span style="color:var(--muted);font-size:0.75rem">(×${DECAY} decay)</span></div>
+              </div>
+              <div class="tt-desc">${riskDesc}</div>
+            `;
+            tooltip.classList.add('visible');
+            tooltip.style.left = (ev.pageX + 16) + 'px';
+            tooltip.style.top = (ev.pageY + 16) + 'px';
+          })
+          .on('mouseout', () => {
+            tooltip.classList.remove('visible');
+          })
+          .on('mousemove', (ev) => {
+            tooltip.style.left = (ev.pageX + 12) + 'px';
+            tooltip.style.top = (ev.pageY + 12) + 'px';
+          });
+
+        simulation = d3.forceSimulation(nodes)
+          .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+          .force('charge', d3.forceManyBody().strength(-120))
+          .force('center', d3.forceCenter(width / 2, height / 2))
+          .force('collision', d3.forceCollide().radius(d => (d.radius || 10) + 12));
+
+        const label = g.append('g').attr('class', 'labels').selectAll('text')
+          .data(nodes)
+          .join('text')
+          .text(d => (d.callSign || '').trim().slice(0, 8))
+          .attr('text-anchor', 'middle')
+          .attr('dy', d => d.radius + 13)
+          .attr('fill', d => parseFloat(d.DELAY_BETA_NORM) > 66 ? DANGER : (parseFloat(d.DELAY_BETA_NORM) > 33 ? WARNING : 'rgba(255,255,255,0.55)'))
+          .attr('font-size', '9px')
+          .attr('font-family', 'Inter, sans-serif')
+          .attr('font-weight', d => parseFloat(d.DELAY_BETA_NORM) > 66 ? '700' : '400')
+          .attr('pointer-events', 'none')
+          .attr('opacity', 0);
+
+        node.transition().delay((d, i) => i * 30).duration(400).attr('opacity', 1);
+        label.transition().delay((d, i) => i * 30 + 200).duration(400).attr('opacity', 1);
+
+        simulation.on('tick', () => {
+          link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+          node.attr('cx', d => d.x).attr('cy', d => d.y);
+          label.attr('x', d => d.x).attr('y', d => d.y);
+        });
+
+        zoom = d3.zoom()
+          .scaleExtent([0.3, 4])
+          .on('zoom', (ev) => g.attr('transform', ev.transform));
+        svg.call(zoom);
+      }
+
+      function setupTabs() {
+        document.querySelectorAll('.tab').forEach(t => {
+          t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            const tab = t.getAttribute('data-tab');
+            document.getElementById('view-' + tab).classList.add('active');
+          });
+        });
+      }
+
+      function getCascadeChain(selectedIndex, injectedDelay) {
+        const start = yyzTop40[selectedIndex];
+        const reg = (start['aircraft.reg'] || '').trim();
+
+        const sameReg = yyzTop40
+          .filter(r => (r['aircraft.reg'] || '').trim() === reg)
+          .sort((a, b) => (a['departure.scheduledTime.utc'] || '').localeCompare(b['departure.scheduledTime.utc'] || ''));
+
+        const startIdx = sameReg.findIndex(r => r === start);
+        if (startIdx < 0) return [];
+        const chain = [];
+        for (let hop = 0; hop < sameReg.length; hop++) {
+          const idx = startIdx + hop;
+          if (idx >= sameReg.length) break;
+          const row = sameReg[idx];
+          const hopDelay = injectedDelay * Math.pow(DECAY, hop);
+          const infected = hopDelay > THRESHOLD;
+          chain.push({
+            row: row,
+            hop: hop,
+            delay: Math.round(hopDelay * 10) / 10,
+            infected: infected,
+            nodeId: yyzTop40.findIndex(r => r === row)
+          });
+        }
+        return chain;
+      }
+
+      function runSimulation() {
+        const sel = document.getElementById('flight-select');
+        const delayInput = document.getElementById('delay-slider');
+        const idx = parseInt(sel.value, 10);
+        const injected = parseInt(delayInput.value, 10);
+        if (isNaN(idx) || idx < 0) return;
+
+        cascadeChain = getCascadeChain(idx, injected);
+        const infectedCount = cascadeChain.filter(c => c.infected).length;
+        const lastDelay = cascadeChain.length ? cascadeChain[cascadeChain.length - 1].delay : 0;
+
+        document.getElementById('res-source').textContent = injected + ' min';
+        document.getElementById('res-infected').textContent = infectedCount;
+        document.getElementById('res-ends').textContent = lastDelay + ' min';
+        document.getElementById('results-panel').classList.remove('hidden');
+
+        const barsWrap = document.getElementById('cascade-bars');
+        const maxMinutes = 180;
+        const scale = (m) => Math.min(100, (m / maxMinutes) * 100);
+        const thresholdPct = scale(15);
+        barsWrap.innerHTML = '';
+
+        const chartWrap = document.createElement('div');
+        chartWrap.className = 'cascade-chart-wrap';
+        chartWrap.style.position = 'relative';
+        barsWrap.appendChild(chartWrap);
+
+        cascadeChain.forEach((c, i) => {
+          const color = c.infected ? (c.delay > 66 ? DANGER : WARNING) : SAFE;
+          const pct = scale(c.delay);
+          const row = document.createElement('div');
+          row.className = 'cascade-bar-row';
+          const label = `${(c.row.callSign || '—')} ${(c.row['airline.iata'] || '')}`;
+          row.innerHTML = `
+            <span class="label">${label}</span>
+            <div class="bar-wrap" style="position:relative">
+              <div class="bar" style="background:${color}" data-width="${pct}"></div>
+              <div class="threshold-line" style="position:absolute; left:${thresholdPct}%; top:0; bottom:0; width:0; border-left:2px dashed ${WARNING}; margin-left:-1px;"></div>
+            </div>
+            <span class="val" style="color:${color}">${c.delay}</span>
+          `;
+          chartWrap.appendChild(row);
+          const bar = row.querySelector('.bar');
+          bar.style.width = '0%';
+          requestAnimationFrame(() => {
+            bar.style.width = bar.getAttribute('data-width') + '%';
+          });
+        });
+
+        const node = d3.select('#network-svg').selectAll('.nodes circle');
+        node.classed('node-red-pulse', false).attr('fill', d => nodeById.get(d.id).color);
+
+        const sourceId = cascadeChain[0] && cascadeChain[0].nodeId;
+        if (sourceId !== undefined) {
+          node.filter(d => d.id === sourceId).attr('fill', DANGER).classed('node-red-pulse', true);
+        }
+
+        cascadeChain.forEach((c, i) => {
+          if (i === 0) return;
+          const color = c.infected ? (c.delay > 66 ? DANGER : WARNING) : SAFE;
+          setTimeout(() => {
+            node.filter(d => d.id === c.nodeId).attr('fill', color);
+            if (c.infected) node.filter(d => d.id === c.nodeId).classed('node-red-pulse', true);
+          }, 600 * i);
+        });
+      }
+
+      function renderGateTable() {
+        const tbody = document.getElementById('gate-tbody');
+        tbody.innerHTML = '';
+        (gateRows || []).forEach(r => {
+          const beta = parseFloat(r.DELAY_BETA_NORM) || 0;
+          let border = 'border-green';
+          if (beta > 66) border = 'border-red';
+          else if (beta > 33) border = 'border-orange';
+          const tr = document.createElement('tr');
+          tr.className = border;
+          tr.innerHTML = `
+            <td>${(r.callSign || '').trim() || '—'}</td>
+            <td>${(r['airline.iata'] || '').trim() || '—'}</td>
+            <td>${(parseFloat(r.PREDICTED_DELAY) || 0).toFixed(1)}</td>
+            <td>${beta.toFixed(1)}</td>
+            <td>${(r['arrival.gate'] || '').trim() || '—'}</td>
+            <td>${(r.ASSIGNED_GATE || '').trim() || '—'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      loadData();
+    })();
+  </script>
+</body>
+</html>

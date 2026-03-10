@@ -1,19 +1,25 @@
 """
 Compute Delay Beta scores from delays.csv (output of Script 1).
 Outputs beta_scores.csv and beta_leaderboard.png.
+Run from project root: python scripts/2_compute_beta.py
 # pip install pandas numpy matplotlib
 """
 
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
+BASE = Path(__file__).resolve().parent.parent
+DATA_PROCESSED = BASE / "data" / "processed"
+DATA_FIGURES = BASE / "data" / "figures"
+
 
 def main():
     # --- Step 1: Load ---
     print("Loading delays.csv...")
-    df = pd.read_csv("delays.csv")
+    df = pd.read_csv(str(DATA_PROCESSED / "delays.csv"))
     df["departure.scheduledTime.utc"] = pd.to_datetime(
         df["departure.scheduledTime.utc"], utc=True
     )
@@ -54,7 +60,7 @@ def main():
     )
 
     # --- Step 5: Output CSV and top 10 ---
-    df.to_csv("beta_scores.csv", index=False)
+    df.to_csv(str(DATA_PROCESSED / "beta_scores.csv"), index=False)
     print(f"beta_scores.csv saved with {len(df)} rows")
 
     top10 = df.nlargest(10, "DELAY_BETA_NORM")[
@@ -87,7 +93,8 @@ def main():
     ax.legend(handles=legend_elements, title="airline.iata")
 
     plt.tight_layout()
-    plt.savefig("beta_leaderboard.png", dpi=150)
+    DATA_FIGURES.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(DATA_FIGURES / "beta_leaderboard.png"), dpi=150)
     plt.close()
     print("\nbeta_leaderboard.png saved.")
 

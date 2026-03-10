@@ -1,10 +1,12 @@
 """
 YYZ Flight Arrival Delay Prediction.
 Uses merged flight data (BTS + YYZ); trains XGBoost and outputs delays.csv + feature_importance.png.
+Run from project root: python scripts/1_predict_delays.py
 # pip install pandas numpy xgboost scikit-learn matplotlib
 """
 
 import sys
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from xgboost import XGBRegressor
@@ -12,8 +14,10 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
-# User updates this path to their CSV location (run 0_merge_data.py first to create merged_flights.csv)
-FILE_PATH = "merged_flights.csv"
+BASE = Path(__file__).resolve().parent.parent
+DATA_PROCESSED = BASE / "data" / "processed"
+DATA_FIGURES = BASE / "data" / "figures"
+FILE_PATH = DATA_PROCESSED / "merged_flights.csv"
 
 REQUIRED_COLUMNS = [
     "aircraft.reg",
@@ -49,7 +53,7 @@ WIDEBODY_MODELS = ["777", "787", "747", "A330", "A340", "A350", "A380"]
 def main():
     # --- Step 1: Load & validate ---
     print("Loading data...")
-    df = pd.read_csv(FILE_PATH, low_memory=False)
+    df = pd.read_csv(str(FILE_PATH), low_memory=False)
     print(df.columns.tolist())
     print(df.shape)
     print(f"Loaded {len(df)} rows, {len(df.columns)} columns")
@@ -149,7 +153,8 @@ def main():
     plt.xlabel("Feature importance")
     plt.title("XGBoost feature importance")
     plt.tight_layout()
-    plt.savefig("feature_importance.png")
+    DATA_FIGURES.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(DATA_FIGURES / "feature_importance.png"))
     plt.close()
 
     # --- Step 6: Output delays.csv ---
@@ -172,7 +177,7 @@ def main():
     ]
     df_out = df.reindex(columns=out_cols)
     print("Saving delays.csv...")
-    df_out.to_csv("delays.csv", index=False)
+    df_out.to_csv(str(DATA_PROCESSED / "delays.csv"), index=False)
     print(f"delays.csv saved with {len(df_out)} rows")
     print("Done.")
 

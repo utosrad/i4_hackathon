@@ -1,16 +1,20 @@
 """
 Merge BTS flight delay dataset with YYZ flight movements into a single enriched training file.
+Run from project root: python scripts/0_merge_data.py
 """
 
+import os
 import sys
+from pathlib import Path
 import pandas as pd
 
-# ---------------------------------------------------------------------------
-# FILE PATH CONFIG (user updates these)
-# ---------------------------------------------------------------------------
-BTS_FILE = "flights_sample_3m.csv"   # large Kaggle delay dataset
-YYZ_FILE = "yyz_flights.csv"         # original YYZ dataset
-OUTPUT_FILE = "merged_flights.csv"
+BASE = Path(__file__).resolve().parent.parent
+DATA_RAW = BASE / "data" / "raw"
+DATA_PROCESSED = BASE / "data" / "processed"
+
+BTS_FILE = DATA_RAW / "flights_sample_3m.csv"
+YYZ_FILE = DATA_RAW / "yyz_flights.csv"
+OUTPUT_FILE = DATA_PROCESSED / "merged_flights.csv"
 
 # Common schema columns for concatenation (same order in both dataframes)
 COMMON_COLUMNS = [
@@ -51,10 +55,23 @@ REQUIRED_BTS_COLUMNS = [
 
 def main():
     # -----------------------------------------------------------------------
+    # CHECK REQUIRED FILES EXIST
+    # -----------------------------------------------------------------------
+    if not BTS_FILE.is_file():
+        print(f"Error: Missing '{BTS_FILE}'")
+        print("  Script 0 needs a BTS/Kaggle flight delay CSV (e.g. from Kaggle 'Flight Delays' or similar).")
+        print("  Place the file in this directory or set BTS_FILE at the top of this script.")
+        sys.exit(1)
+    if not YYZ_FILE.is_file():
+        print(f"Error: Missing '{YYZ_FILE}'")
+        print("  Place the YYZ flight movements CSV in this directory.")
+        sys.exit(1)
+
+    # -----------------------------------------------------------------------
     # STEP 1 — LOAD BTS DATASET
     # -----------------------------------------------------------------------
     print("Loading BTS dataset (this may take a moment)...")
-    df_bts = pd.read_csv(BTS_FILE)
+    df_bts = pd.read_csv(str(BTS_FILE))
     print(f"BTS loaded: {len(df_bts)} rows")
 
     # Optional compatibility: repo's file uses AIRLINE_CODE and may lack TAIL_NUM
@@ -107,7 +124,7 @@ def main():
     # STEP 3 — LOAD & STANDARDIZE YYZ DATASET
     # -----------------------------------------------------------------------
     print("Loading YYZ dataset...")
-    df_yyz = pd.read_csv(YYZ_FILE)
+    df_yyz = pd.read_csv(str(YYZ_FILE))
 
     print("Computing YYZ arrival delays...")
     df_yyz["arrival.scheduledTime.utc"] = pd.to_datetime(
@@ -153,14 +170,14 @@ def main():
     # STEP 5 — SAVE
     # -----------------------------------------------------------------------
     print("Saving merged_flights.csv...")
-    merged.to_csv(OUTPUT_FILE, index=False)
+    merged.to_csv(str(OUTPUT_FILE), index=False)
     print(f"merged_flights.csv saved with {len(merged)} rows")
 
-    merged = pd.read_csv(OUTPUT_FILE, nrows=5)
+    merged = pd.read_csv(str(OUTPUT_FILE), nrows=5)
     print("Merged ARR_DELAY sample:", merged["ARR_DELAY"].tolist())
     print(
         "Merged ARR_DELAY non-null count:",
-        pd.read_csv(OUTPUT_FILE)["ARR_DELAY"].notna().sum(),
+        pd.read_csv(str(OUTPUT_FILE))["ARR_DELAY"].notna().sum(),
     )
     print("Done.")
 

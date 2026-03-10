@@ -1,13 +1,19 @@
 """
 Assign gates to flights using beta scores from Script 2, minimizing delay cascade risk.
 Uses MILP (PuLP) to avoid gate conflicts while considering DELAY_BETA_NORM.
+Run from project root: python scripts/3_optimize_gates.py
 # pip install pulp pandas numpy matplotlib
 """
 
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import pulp
 import matplotlib.pyplot as plt
+
+BASE = Path(__file__).resolve().parent.parent
+DATA_PROCESSED = BASE / "data" / "processed"
+DATA_FIGURES = BASE / "data" / "figures"
 
 
 def conflicts(f1, f2):
@@ -34,7 +40,7 @@ def count_conflicts(df, gate_col):
 def main():
     # --- STEP 1: Load & prep ---
     print("Loading beta_scores.csv...")
-    df = pd.read_csv("beta_scores.csv")
+    df = pd.read_csv(str(DATA_PROCESSED / "beta_scores.csv"))
     df["departure.scheduledTime.utc"] = pd.to_datetime(
         df["departure.scheduledTime.utc"], utc=True
     )
@@ -156,7 +162,7 @@ def main():
         "arrival.gate",
         "ASSIGNED_GATE",
     ]
-    flights[out_cols].to_csv("gate_assignments.csv", index=False)
+    flights[out_cols].to_csv(str(DATA_PROCESSED / "gate_assignments.csv"), index=False)
     print("gate_assignments.csv saved")
 
     # --- STEP 9: Plot ---
@@ -169,7 +175,8 @@ def main():
     ax.set_title("Gate Conflicts: Before vs After Optimization")
     ax.legend()
     plt.tight_layout()
-    plt.savefig("gate_optimization_result.png", dpi=150)
+    DATA_FIGURES.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(DATA_FIGURES / "gate_optimization_result.png"), dpi=150)
     plt.close()
     print("gate_optimization_result.png saved")
 
